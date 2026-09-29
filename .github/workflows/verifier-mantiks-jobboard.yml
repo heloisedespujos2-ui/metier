@@ -1,0 +1,37 @@
+name: verifier-mantiks-jobboard
+
+on:
+  workflow_dispatch:
+    inputs:
+      company:
+        description: Company to check
+        required: true
+        type: string
+        default: Intermarché
+      confirm_one_credit:
+        description: Confirm one Mantiks credit for the company jobs request
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: inputs.confirm_one_credit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install requests
+
+      - name: Check Mantiks job-board labels
+        env:
+          MANTIKS_API_KEY: ${{ secrets.MANTIKS_API_KEY }}
+          MANTIKS_COMPANY_QUERY: ${{ inputs.company }}
+        run: python scripts/verifier_mantiks_jobboard.py

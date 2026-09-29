@@ -1,0 +1,105 @@
+"""Check job-board labels for one Mantiks company; never prints credentials or job details."""
+import json
+import os
+import sys
+import unicodedata
+from collections import Counter
+from urllib.parse import quote
+
+import requests
+
+
+BASE_URL = "https://dashboard.mantiks.io/api/v2"
+COMPANY_QUERY = os.getenv("MANTIKS_COMPANY_QUERY", "Intermarché")
+
+
+def normaliser(value):
+    decomposed = unicodedata.normalize("NFKD", value or "")
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
+def get_json(session, path):
+    response = session.get(f"{BASE_URL}{path}", timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def main():
+    api_key = os.getenv("MANTIKS_API_KEY")
+    if not api_key:
+        print("MANTIKS_API_KEY is not configured in GitHub Actions secrets.")
+        return 2
+
+    session = requests.Session()
+    session.headers.update({"X-API-KEY": api_key, "Accept": "application/json"})
+
+    try:
+        companies = get_json(session, f"/companies/search?query={quote(COMPANY_QUERY)}")
+        candidates = [
+            company for company in companies
+            if "intermarche" in normaliser(company.get("name"))
+            or "mousquetaires" in normaliser(company.get("name"))
+        ]
+        exact = [c for c in candidates if "intermarche" in normaliser(c.get("name"))]
+        selected = exact if len(exact) == 1 else candidates if len(candidates) == 1 else []
+        if len(selected) != 1:
+            print("Could not identify one Intermarché company; no credit-consuming request was made.")
+            for company in candidates[:10]:
+                print(f"Candidate: {company.get('name', 'unknown')}")
+            return 2
+
+        locations = get_json(session, "/locations/search?query=France")
+        france = [
+            location for location in locations
+            if location.get("type") == "country" and location.get("country") == "France"
+        ]
+        if not france:
+            print("Mantiks did not return a France location; no credit-consuming request was made.")
+            return 2
+
+        company = selected[0]
+        payload = {
+            "locations": [{"id": france[0]["id"], "radius": None}],
+            "job_title_query": None,
+            "job_title_include": [],
+            "job_title_exclude": [],
+            "description_include": [],
+            "description_exclude": [],
+            "description_query": None,
+            "published_date_window_days": 360,
+            "volume": {"gte": None, "lte": None},
+            "is_reposting": False,
+        }
+        response = session.post(
+            f"{BASE_URL}/companies/{quote(company['id'], safe='')}/jobs",
+            json=payload,
+            timeout=45,
+        )
+        response.raise_for_status()
+        result = response.json()
+    except requests.RequestException as error:
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        print(f"Mantiks request failed{f' (HTTP {status})' if status else ''}; response details omitted.")
+        return 1
+    finally:
+        session.close()
+
+    jobs = result.get("jobs") or []
+    boards = Counter(job.get("job_board") or "(missing)" for job in jobs)
+    print(f"Company: {company.get('name', 'Intermarché')}")
+    print(f"Active jobs: {result.get('active', 0)}; returned: {result.get('returned', len(jobs))}")
+    print("job_board counts in the returned sample:")
+    for board, count in boards.most_common():
+        print(f"  {board}: {count}")
+
+    wttj_count = sum(
+        count for board, count in boards.items()
+        if "welcometothejungle" in normaliser(board).replace(" ", "")
+        or "wttj" in normaliser(board).replace(" ", "")
+    )
+    print(f"WTTJ-labelled jobs in this sample: {wttj_count}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
