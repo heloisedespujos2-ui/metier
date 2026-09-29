@@ -35,15 +35,14 @@ def main():
 
     try:
         companies = get_json(session, f"/companies/search?query={quote(COMPANY_QUERY)}")
+        query_tokens = [token for token in normaliser(COMPANY_QUERY).replace("-", " ").split() if token]
         candidates = [
             company for company in companies
-            if "intermarche" in normaliser(company.get("name"))
-            or "mousquetaires" in normaliser(company.get("name"))
+            if all(token in normaliser(company.get("name")) for token in query_tokens)
         ]
-        exact = [c for c in candidates if "intermarche" in normaliser(c.get("name"))]
-        selected = exact if len(exact) == 1 else candidates if len(candidates) == 1 else []
+        selected = candidates if len(candidates) == 1 else []
         if len(selected) != 1:
-            print("Could not identify one Intermarché company; no credit-consuming request was made.")
+            print(f"Could not identify one company matching {COMPANY_QUERY!r}; no credit-consuming request was made.")
             for company in candidates[:10]:
                 print(f"Candidate: {company.get('name', 'unknown')}")
             return 2

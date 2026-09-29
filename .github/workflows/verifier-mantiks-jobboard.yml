@@ -7,7 +7,7 @@ on:
         description: Company to check
         required: true
         type: string
-        default: Intermarché
+        default: Intermarché Lyon
       confirm_one_credit:
         description: Confirm one Mantiks credit for the company jobs request
         required: true
