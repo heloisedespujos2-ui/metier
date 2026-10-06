@@ -4,6 +4,8 @@ import os
 import sys
 import unicodedata
 from collections import Counter
+from datetime import date
+from pathlib import Path
 from urllib.parse import quote
 
 import requests
@@ -11,6 +13,26 @@ import requests
 
 BASE_URL = "https://dashboard.mantiks.io/api/v2"
 COMPANY_QUERY = os.getenv("MANTIKS_COMPANY_QUERY", "Intermarché")
+RACINE = Path(__file__).resolve().parent.parent
+
+
+def save_mantiks_result(output_root, company_name, result):
+    """Enregistre une réponse Mantiks dans un dossier de données dédié."""
+    output_root.mkdir(parents=True, exist_ok=True)
+    safe_company = "".join(c if c.isalnum() or c in "-._ " else "_" for c in company_name)
+    safe_company = safe_company.strip().replace(" ", "-") or "entreprise"
+    output_file = output_root / f"{date.today():%Y-%m-%d}_{safe_company}.json"
+    payload = {
+        "schema": 1,
+        "source": "Mantiks",
+        "company": company_name,
+        "date": date.today().isoformat(),
+        "active": result.get("active", 0),
+        "returned": result.get("returned", len(result.get("jobs") or [])),
+        "jobs": result.get("jobs") or [],
+    }
+    output_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return output_file
 
 
 def normaliser(value):
@@ -87,10 +109,12 @@ def main():
     finally:
         session.close()
 
+    saved = save_mantiks_result(RACINE / "data" / "mantiks", company.get("name", COMPANY_QUERY), result)
     jobs = result.get("jobs") or []
     boards = Counter(job.get("job_board") or "(missing)" for job in jobs)
     print(f"Company: {company.get('name', 'Intermarché')}")
     print(f"Active jobs: {result.get('active', 0)}; returned: {result.get('returned', len(jobs))}")
+    print(f"Saved result: {saved.relative_to(RACINE)}")
     print("job_board counts in the returned sample:")
     for board, count in boards.most_common():
         print(f"  {board}: {count}")

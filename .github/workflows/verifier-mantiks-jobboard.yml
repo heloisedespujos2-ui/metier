@@ -35,3 +35,11 @@ jobs:
           MANTIKS_API_KEY: ${{ secrets.MANTIKS_API_KEY }}
           MANTIKS_COMPANY_QUERY: ${{ inputs.company }}
         run: python scripts/verifier_mantiks_jobboard.py
+
+      - name: Upload Mantiks result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mantiks-result
+          path: data/mantiks/*.json
+          if-no-files-found: ignore
