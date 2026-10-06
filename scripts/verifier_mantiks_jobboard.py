@@ -40,7 +40,11 @@ def main():
             company for company in companies
             if all(token in normaliser(company.get("name")) for token in query_tokens)
         ]
-        selected = candidates if len(candidates) == 1 else []
+        exact = [
+            company for company in candidates
+            if normaliser(company.get("name")) == normaliser(COMPANY_QUERY)
+        ]
+        selected = exact if len(exact) == 1 else candidates if len(candidates) == 1 else []
         if len(selected) != 1:
             print(f"Could not identify one company matching {COMPANY_QUERY!r}; no credit-consuming request was made.")
             for company in candidates[:10]:
